@@ -1,0 +1,35 @@
+let
+    // Gets all files in the ERA data directory
+    Source = Folder.Files(FILENAME & "\data\ERA"),
+
+    // Filtered out non-relevant files
+    #"Filtered rows" = Table.SelectRows(Source, each not Text.StartsWith([Name], "~$") and [Extension] = ".xlsx" and [Attributes]?[Hidden]? <> true),
+
+    // Sort rows by most recently modified
+    #"Sorted rows" = Table.Sort(#"Filtered rows", {{"Date modified", Order.Descending}}),
+
+    // Keep the top row
+    #"Kept top rows" = Table.FirstN(#"Sorted rows", 1),
+
+    // Opens the workbook and gets the data from the desired table
+    #"Open workbook" = Table.SelectRows(Table.RemoveColumns(Table.AddColumn(#"Kept top rows", "Data", each Excel.Workbook(File.Contents([Folder Path] & [Name]))), {"Folder Path", "Attributes", "Date created", "Date modified", "Date accessed", "Extension", "Name", "Content"}){0}[Data], each [Kind] = "Sheet" and Text.Contains([Item], "Submission Journal List") and [Hidden] <> true){0}[Data],
+
+    // Uses the first row as the table headers
+    #"Promoted Headers" = Table.PromoteHeaders(#"Open workbook", [PromoteAllScalars=true]),
+
+    // Replaces null values with empty strings
+    #"Replaced Value" = Table.ReplaceValue(#"Promoted Headers",null,"",Replacer.ReplaceValue,{"FoR 1 Name", "FoR 2", "FoR 2 Name", "FoR 3", "FoR 3 Name", "ISSN 1", "ISSN 2", "ISSN 3", "ISSN 4", "ISSN 5", "ISSN 6", "ISSN 7"}),
+
+    // Remove unrequired columns
+    #"Removed Columns" = Table.RemoveColumns(#"Replaced Value",{"ERA Journal Id", "Foreign Title", "Column17"}),
+
+    // Merges the FoR codes and names into a semicolon delimited string contained in a single column
+    #"Merged FoR Columns" = Table.TransformColumns(Table.CombineColumns(#"Removed Columns",{"FoR 1", "FoR 1 Name", "FoR 2", "FoR 2 Name", "FoR 3", "FoR 3 Name"}, Combiner.CombineTextByDelimiter(" ", QuoteStyle.None),"FoR Code/Name"), {{"FoR Code/Name", Text.Trim, type text}}),
+
+    // Condenses all ISSN for a single journal into one row
+    #"Unique rows by ISSN" = Table.ExpandListColumn(Table.TransformColumns(Table.TransformColumns(Table.CombineColumns(#"Merged FoR Columns",{"ISSN 1", "ISSN 2", "ISSN 3", "ISSN 4", "ISSN 5", "ISSN 6", "ISSN 7"}, Combiner.CombineTextByDelimiter(" ", QuoteStyle.None), "ISSN"), {{"ISSN", Text.Trim, type text}}), {{"ISSN", Splitter.SplitTextByDelimiter(" ", QuoteStyle.Csv), let itemType = (type nullable text) meta [Serialized.Text = true] in type {itemType}}}), "ISSN"),
+
+    // Reorders the columns
+    #"Reordered Columns" = Table.ReorderColumns(#"Unique rows by ISSN",{"ISSN", "Title", "FoR Code/Name"})
+in
+    #"Reordered Columns"

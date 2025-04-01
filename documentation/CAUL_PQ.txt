@@ -1,0 +1,44 @@
+let
+    // Gets all files in the CAUL data directory
+    Source = Folder.Files(FILENAME & "\data\CAUL"),
+
+    // Filtered out non-relevant files
+    #"Filtered rows" = Table.SelectRows(Source, each not Text.StartsWith([Name], "~$") and [Extension] = ".xlsx" and [Attributes]?[Hidden]? <> true),
+
+    // Sort rows by most recently modified
+    #"Sorted rows" = Table.Sort(#"Filtered rows", {{"Date modified", Order.Descending}}),
+
+    // Keep the top row
+    #"Kept top rows" = Table.FirstN(#"Sorted rows", 1),
+
+    // Opens the workbook and gets the data from the desired table
+    #"Open workbook" = Table.SelectRows(Table.RemoveColumns(Table.AddColumn(#"Kept top rows", "Data", each Excel.Workbook(File.Contents([Folder Path] & [Name]))), {"Folder Path", "Attributes", "Date created", "Date modified", "Date accessed", "Extension", "Name", "Content"}){0}[Data], each [Kind] = "Sheet" and [Hidden] <> true){0}[Data],
+
+    // Uses the first row as the table headers
+    #"Promoted Headers" = Table.PromoteHeaders(#"Open workbook", [PromoteAllScalars=true]),
+
+    // Remove any rows where the journal name is null
+    #"Remove null journal rows" = Table.SelectRows(#"Promoted Headers", each [Journal Name] <> null),
+
+    // Applies the correct data types to each column
+    #"Changed Type" = Table.TransformColumnTypes(#"Remove null journal rows",{{"Journal Name", type text}, {"Included in CAUL OA agreement?", type text}, {"Notes", type text}, {"Publisher Name", type text}, {"Last Updated", type date}, {"ISSN", type text}, {"eISSN", type text}, {"Journal Website", type text}, {"Journal Type", type text}, {"Journal Abbreviation", type text}, {"Imprint Name", type text}, {"Included in CAUL discount scheme?", type text}}),
+
+    // Conditionally adds the string "Included in CAUL discount scheme" to the Notes column
+    #"Add discount scheme note" = Table.TransformColumns(Table.ReplaceValue(Table.ReplaceValue(#"Changed Type", null, " ", Replacer.ReplaceValue, {"Notes"}), each [Notes], each if [#"Included in CAUL discount scheme?"] = "Yes" then [Notes] & " Included in CAUL discount scheme" else [Notes], Replacer.ReplaceText, {"Notes"}), {{"Notes", Text.Trim, type text}}),
+
+    // Condenses all ISSN for a single journal into one row
+    #"Unique rows by ISSN" = Table.ExpandListColumn(Table.TransformColumns(Table.TransformColumns(Table.CombineColumns(#"Add discount scheme note", {"ISSN", "eISSN"}, Combiner.CombineTextByDelimiter(" ", QuoteStyle.None), "ISSN"), {{"ISSN", Text.Trim, type text}}), {{"ISSN", Splitter.SplitTextByDelimiter(" ", QuoteStyle.Csv), let itemType = (type nullable text) meta [Serialized.Text = true] in type {itemType}}}), "ISSN"),
+
+    // Reorders the columns
+    #"Reordered Columns" = Table.ReorderColumns(#"Unique rows by ISSN",{"Journal Name", "ISSN", "Included in CAUL OA agreement?", "Notes", "Publisher Name", "Last Updated", "Journal Website", "Journal Type", "Journal Abbreviation", "Imprint Name", "Included in CAUL discount scheme?"}),
+
+    // Remove unrequired columns
+    #"Removed Columns" = Table.RemoveColumns(#"Reordered Columns",{"Last Updated", "Journal Website", "Journal Abbreviation", "Imprint Name", "Included in CAUL discount scheme?"}),
+
+    // Rename columns to match original tool
+    #"Renamed Columns" = Table.RenameColumns(#"Removed Columns",{{"Included in CAUL OA agreement?", "Included in R&P agreement"}}),
+
+    // Replace null values with empty strings
+    #"Replaced Value" = Table.ReplaceValue(#"Renamed Columns",null,"",Replacer.ReplaceValue,{"Journal Type"})
+in
+    #"Replaced Value"

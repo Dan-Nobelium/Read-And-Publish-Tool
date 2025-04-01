@@ -1,0 +1,12 @@
+Sub GenerateDocument()
+'
+' Generates a copy of the refreshed data to the current directory
+'
+    Utils.RefreshIndicator ("B2")
+    Utils.RefreshConnections
+    Utils.RefreshIndicator ("B2")
+    ThisWorkbook.Save ' Save the current file before creating a new one
+    Utils.DeleteQueries
+    Utils.DeleteSheet ("Control Panel")
+    Utils.SaveCopy
+End Sub

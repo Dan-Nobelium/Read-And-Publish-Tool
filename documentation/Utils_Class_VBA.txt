@@ -1,0 +1,64 @@
+Sub DisableBackgroundQuery()
+'
+' Disables background (async) refresh on Power Query Connections
+'
+    For Each conn In ThisWorkbook.Connections
+        conn.OLEDBConnection.BackgroundQuery = False
+    Next
+End Sub
+
+Sub RefreshIndicator(rng As String)
+'
+' Highlights the colour of a cell and places a string to indicate refresh status
+'
+    With Range(rng)
+        If .Value = "Refreshing" Then
+            .Value = "Refreshed @ " & Format(Date, "yyyy-mm-dd")
+            .Interior.Color = RGB(0, 176, 80)
+        Else
+            .Value = "Refreshing"
+            .Interior.Color = RGB(192, 0, 0)
+        End If
+    End With
+End Sub
+
+Sub RefreshConnections()
+'
+' Refreshes all Power Query Connections and waits
+'
+    Utils.DisableBackgroundQuery
+    ActiveWorkbook.RefreshAll
+    DoEvents ' Do events essentially tells Excel to wait for the refresh to finish prior to continuing
+End Sub
+
+Sub DeleteQueries()
+'
+' Deletes all Power Query Connections
+'
+    For Each conn In ThisWorkbook.Queries
+        conn.Delete
+    Next
+End Sub
+
+Sub DeleteSheet(sht As String)
+'
+' Deletes the sheet based on the given argument
+'
+    Application.DisplayAlerts = False ' disable alerts to prevent the user needing to verify the deletion
+    
+    Sheets(sht).Delete
+    
+    Application.DisplayAlerts = True
+End Sub
+
+Sub SaveCopy()
+'
+' Saves the workbook in the current directory with a new name
+'
+    Application.DisplayAlerts = False ' disable alerts to prevent the user needing to click okay to saving a non-macro file
+    
+    fname = Format(Date, "yyyy-mm-dd") & " Read and Publish Journal Tool - UNE.xlsx" ' A string containing the desired filename with optimal date format for sorting
+    ActiveWorkbook.SaveAs ThisWorkbook.Path & "\" & fname, xlWorkbookDefault
+    
+    Application.DisplayAlerts = True
+End Sub

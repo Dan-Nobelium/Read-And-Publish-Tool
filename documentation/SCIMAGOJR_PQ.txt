@@ -1,0 +1,29 @@
+let
+    // Gets all files in the CAUL data directory
+    Source = Folder.Files(FILENAME & "\data\SCIMAGOJR"),
+
+    // Filtered out non-relevant files
+    #"Filtered rows" = Table.SelectRows(Source, each not Text.StartsWith([Name], "~$") and [Extension] = ".csv" and [Attributes]?[Hidden]? <> true),
+
+    // Sort rows by most recently modified
+    #"Sorted rows" = Table.Sort(#"Filtered rows", {{"Date modified", Order.Descending}}),
+
+    // Keep the top row
+    #"Kept top rows" = Table.FirstN(#"Sorted rows", 1),
+
+    // Opens the csv and gets the data
+    #"Open workbook" = Table.RemoveColumns(Table.AddColumn(#"Kept top rows", "Data", each Csv.Document(File.Contents([Folder Path] & [Name]), [Delimiter=";"])), {"Content", "Name", "Extension", "Date accessed", "Date modified", "Date created", "Attributes", "Folder Path"})[Data]{0},
+
+    // Uses the first row as the table headers
+    #"Promoted Headers" = Table.PromoteHeaders(#"Open workbook", [PromoteAllScalars=true]),
+
+    // Applies the correct data types to each column
+    #"Changed Type" = Table.TransformColumnTypes(#"Promoted Headers",{{"Rank", Int64.Type}, {"Sourceid", Int64.Type}, {"Title", type text}, {"Type", type text}, {"Issn", type text}, {"SJR", Int64.Type}, {"SJR Best Quartile", type text}, {"H index", Int64.Type}, {"Total Docs. (2022)", Int64.Type}, {"Total Docs. (3years)", Int64.Type}, {"Total Refs.", Int64.Type}, {"Total Cites (3years)", Int64.Type}, {"Citable Docs. (3years)", Int64.Type}, {"Cites / Doc. (2years)", Int64.Type}, {"Ref. / Doc.", Int64.Type}, {"Country", type text}, {"Region", type text}, {"Publisher", type text}, {"Coverage", type text}, {"Categories", type text}, {"Areas", type text}}),
+
+    // Remove unrequired columns
+    #"Removed Columns" = Table.RemoveColumns(#"Changed Type",{"Rank", "Sourceid", "Type", "Total Docs. (2022)", "Total Docs. (3years)", "Total Refs.", "Total Cites (3years)", "Citable Docs. (3years)", "Cites / Doc. (2years)", "Ref. / Doc.", "Country", "Region", "Publisher", "Coverage"}),
+
+    // Condenses all ISSN for a single journal into one row
+    #"Unique rows by ISSN" = Table.Distinct(Table.TransformColumns(Table.ExpandListColumn(Table.TransformColumns(Table.TransformColumns(#"Removed Columns",{{"Issn", Text.Trim, type text}}), {{"Issn", Splitter.SplitTextByDelimiter(", ", QuoteStyle.Csv), let itemType = (type nullable text) meta [Serialized.Text = true] in type {itemType}}}), "Issn"), {{"Issn", each if Text.Length(_) = 8 then Text.Insert(_, 4, "-") else _, type nullable text}}), {"Issn"})
+in
+    #"Unique rows by ISSN"

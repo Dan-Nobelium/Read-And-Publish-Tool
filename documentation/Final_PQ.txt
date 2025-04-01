@@ -1,0 +1,18 @@
+let
+    // First join (left join ERA to CAUL data)
+    Source = Table.NestedJoin(CAUL, {"ISSN"}, ERA, {"ISSN"}, "ERA", JoinKind.LeftOuter),
+
+    // Second join (left join SCIMAGOJR to CAUL data)
+    #"Merged Queries" = Table.NestedJoin(Source, {"ISSN"}, SCIMAGOJR, {"Issn"}, "SCIMAGOJR", JoinKind.LeftOuter),
+
+    // expand the merged data
+    #"Expanded ERA" = Table.ExpandTableColumn(#"Merged Queries", "ERA", {"FoR Code/Name"}, {"FoR Code/Name"}),
+    #"Expanded SCIMAGOJR" = Table.ExpandTableColumn(#"Expanded ERA", "SCIMAGOJR", {"SJR", "SJR Best Quartile", "H index", "Categories", "Areas"}, {"SJR", "SJR Best Quartile", "H index", "Categories", "Areas"}),
+
+    // Sort the journals by lexicographical order
+    #"Sorted Rows" = Table.Sort(#"Expanded SCIMAGOJR",{{"Journal Name", Order.Ascending}}),
+
+    // Groups the data by the journal name
+    #"Grouped Rows" = Table.Group(#"Sorted Rows", {"Journal Name"}, {{"ISSN", each Text.Combine([ISSN], "; "), type nullable text}, {"Included in R&P agreement", each List.Max([#"Included in R&P agreement"]), type nullable text}, {"Notes", each List.Max([Notes]), type nullable text}, {"Publisher Name", each List.Max([Publisher Name]), type nullable text}, {"Journal Type", each List.Max([Journal Type]), type nullable text}, {"FoR Code/Name", each List.Max([#"FoR Code/Name"]), type nullable text}, {"SJR Best Quartile", each List.Max([SJR Best Quartile]), type nullable text}, {"SJR", each List.Max([SJR]), type nullable number}, {"H index", each List.Max([H index]), type nullable number}, {"SJR Categories", each List.Max([Categories]), type nullable text}, {"SJR Areas", each List.Max([Areas]), type nullable text}})
+in
+    #"Grouped Rows"

@@ -1,0 +1,2 @@
+// Gets the current working directory from a named range in the excel document
+= Excel.CurrentWorkbook(){[Name="FILENAME"]}[Content]{0}[Column1]
